@@ -318,8 +318,27 @@ export function createCrossplaneClaimAction({config}: {config: any}) {
             : path.relative(ctx.workspacePath, kustomizationDir);
 
           let existingResources: string[] = [];
+
+          // A publish flow that clones the repository into the workspace first (Azure DevOps)
+          // already has the current kustomization.yaml on disk. Merge into that, otherwise the
+          // remote lookup below — which only speaks the GitHub contents API — silently drops
+          // every resource already listed in the file.
           try {
-            if (owner && repo) {
+            if (fs.existsSync(kustomizationPath)) {
+              const parsed = yaml.load(fs.readFileSync(kustomizationPath, 'utf8') as string) as any;
+              if (Array.isArray(parsed?.resources)) {
+                existingResources = parsed.resources;
+                ctx.logger.info(
+                  `Merging into kustomization.yaml already in the workspace at ${kustomizationDir} with ${existingResources.length} resource(s)`,
+                );
+              }
+            }
+          } catch (e) {
+            ctx.logger.warn(`Could not read kustomization.yaml at ${kustomizationPath}: ${e}`);
+          }
+
+          try {
+            if (existingResources.length === 0 && owner && repo) {
               const kustomizationGitPath = encodeURI(resolvedRepoDir ? `${resolvedRepoDir}/kustomization.yaml` : 'kustomization.yaml');
               const fetchUrl = `${apiBase}/repos/${owner}/${repo}/contents/${kustomizationGitPath}?ref=${targetBranch}`;
 

@@ -772,6 +772,38 @@ describe('createCrossplaneClaimAction', () => {
       expect(fetchUrl).toContain('presets/eu-west-1/my-db/kustomization.yaml');
     });
 
+    it('merges into a cloned kustomization.yaml already in the workspace', async () => {
+      // Azure DevOps clones the repo into the workspace before templating, and the
+      // remote lookup below only speaks the GitHub contents API.
+      mockHttpsGet(404);
+      (fs.existsSync as jest.Mock).mockImplementation((p: string) =>
+        p === '/tmp/workspace/presets/eu-west-1/my-db/kustomization.yaml',
+      );
+      (fs.readFileSync as jest.Mock).mockReturnValue(`---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - already-in-repo.yaml
+`);
+
+      const action = createCrossplaneClaimAction({ config: mockConfig });
+      const ctx = createMockContext({
+        ...baseInput,
+        generateKustomization: true,
+        xrdPathInWorkspace: true,
+      });
+
+      await action.handler!(ctx as any);
+
+      const calls = (fs.outputFileSync as jest.Mock).mock.calls;
+      const [, kustomizationContent] = calls.find(([p]: [string]) =>
+        p.endsWith('kustomization.yaml'),
+      );
+      expect(kustomizationContent).toContain('already-in-repo.yaml');
+      expect(kustomizationContent).toContain('my-db.yaml');
+      expect(httpsModule.get as jest.Mock).not.toHaveBeenCalled();
+    });
+
     it('merges new entry into existing kustomization.yaml fetched from GitHub', async () => {
       const existingKustomization = `---
 apiVersion: kustomize.config.k8s.io/v1beta1
