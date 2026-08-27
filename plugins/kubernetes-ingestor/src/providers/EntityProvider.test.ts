@@ -3317,6 +3317,52 @@ describe('XRDTemplateEntityProvider', () => {
     });
   });
 
+  describe('extractSteps – Azure DevOps publishing', () => {
+    const azureConfig = new ConfigReader({
+      kubernetesIngestor: {
+        crossplane: {
+          xrds: {
+            publishPhase: {
+              target: 'azure',
+              allowRepoSelection: false,
+              git: {
+                repoUrl: 'dev.azure.com?organization=example&project=Platform&repo=manifests',
+                targetBranch: 'main',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    it('pushes a branch and creates an Azure DevOps pull request', () => {
+      const provider = new XRDTemplateEntityProvider(
+        { run: jest.fn() } as any,
+        mockLogger,
+        azureConfig,
+        mockResourceFetcher as any,
+      );
+      const version = {
+        name: 'v1alpha1',
+        schema: { openAPIV3Schema: { type: 'object', properties: { spec: { type: 'object', properties: {} } } } },
+      };
+      const xrd = {
+        metadata: { name: 'myresources.example.com', annotations: {} },
+        spec: { scope: 'Cluster', names: { kind: 'MyResource' }, group: 'example.com', versions: [version] },
+        clusters: ['test-cluster'],
+      };
+
+      const steps: any[] = (provider as any).extractSteps(version, xrd);
+
+      expect(steps.map(step => step.action)).toEqual(expect.arrayContaining([
+        'terasky:azure-devops:repository-details',
+        'azure:repository:push',
+        'azure:pr:create',
+      ]));
+      expect(steps.find(step => step.id === 'create-pull-request').input.targetBranch).toBe('main');
+    });
+  });
+
   // ── branchPrefix ──────────────────────────────────────────────────────────────
 
   describe('extractSteps – branchPrefix in publishPhase.git', () => {

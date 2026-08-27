@@ -1486,6 +1486,10 @@ export class XRDTemplateEntityProvider implements EntityProvider {
     const publishPhaseTarget = this.config.getOptionalString('kubernetesIngestor.crossplane.xrds.publishPhase.target')?.toLowerCase();
     let action = '';
     switch (publishPhaseTarget) {
+      case 'azure':
+      case 'azuredevops':
+        action = 'azure:repository:push';
+        break;
       case 'gitlab':
         action = 'publish:gitlab:merge-request';
         break;
@@ -1508,6 +1512,42 @@ export class XRDTemplateEntityProvider implements EntityProvider {
     const userOAuthTokenInput = requestUserCredentials
       ? '    token: ${{ secrets.USER_OAUTH_TOKEN }}\n'
       : '';
+    const azureRepoUrl = allowRepoSelection
+      ? '${{ parameters.repoUrl }}'
+      : this.config.getOptionalString('kubernetesIngestor.crossplane.xrds.publishPhase.git.repoUrl');
+    const azureBranchName = allowRepoSelection
+      ? '${{ parameters.branchPrefix }}create-${{ parameters.xrName }}-resource'
+      : `${branchPrefix}create-\${{ parameters.xrName }}-resource`;
+    const azureTargetBranch = allowRepoSelection
+      ? '${{ parameters.targetBranch }}'
+      : this.config.getOptionalString('kubernetesIngestor.crossplane.xrds.publishPhase.git.targetBranch');
+    const azurePublishStepsYaml =
+      `- id: azure-repository-details\n` +
+      `  name: Parse Azure DevOps repository\n` +
+      `  action: terasky:azure-devops:repository-details\n` +
+      `  if: \${{ parameters.pushToGit }}\n` +
+      `  input:\n` +
+      `    repoUrl: ${azureRepoUrl}\n` +
+      `- id: push-branch\n` +
+      `  name: Push manifest branch\n` +
+      `  action: azure:repository:push\n` +
+      `  if: \${{ parameters.pushToGit }}\n` +
+      `  input:\n` +
+      `    remoteUrl: \${{ steps['azure-repository-details'].output.remoteUrl }}\n` +
+      `    branch: ${azureBranchName}\n` +
+      `    gitCommitMessage: Create {KIND} Resource \${{ parameters.xrName }}\n${userOAuthTokenInput}` +
+      `- id: create-pull-request\n` +
+      `  name: Create pull request\n` +
+      `  action: azure:pr:create\n` +
+      `  if: \${{ parameters.pushToGit }}\n` +
+      `  input:\n` +
+      `    organization: \${{ steps['azure-repository-details'].output.organization }}\n` +
+      `    project: \${{ steps['azure-repository-details'].output.project }}\n` +
+      `    repoName: \${{ steps['azure-repository-details'].output.repository }}\n` +
+      `    sourceBranch: ${azureBranchName}\n` +
+      `    targetBranch: ${azureTargetBranch}\n` +
+      `    title: Create {KIND} Resource \${{ parameters.xrName }}\n` +
+      `    description: Create {KIND} Resource \${{ parameters.xrName }}\n${userOAuthTokenInput}`;
     const repoSelectionStepsYaml =
       `- id: create-pull-request\n` +
       `  name: create-pull-request\n` +
@@ -1524,7 +1564,9 @@ export class XRDTemplateEntityProvider implements EntityProvider {
     let defaultStepsYaml = baseStepsYaml;
 
     if (publishPhaseTarget !== 'yaml') {
-      if (allowRepoSelection) {
+      if (publishPhaseTarget === 'azure' || publishPhaseTarget === 'azuredevops') {
+        defaultStepsYaml += azurePublishStepsYaml;
+      } else if (allowRepoSelection) {
         defaultStepsYaml += repoSelectionStepsYaml;
       }
       else {
