@@ -24,20 +24,28 @@ export function createAzureDevOpsRepositoryDetailsAction() {
       },
     },
     async handler(ctx) {
-      const url = new URL(
-        ctx.input.repoUrl.includes('://')
-          ? ctx.input.repoUrl
-          : `https://${ctx.input.repoUrl}`,
+      const invalidRepoUrlError = new Error(
+        'repoUrl must be an Azure DevOps RepoUrlPicker value: ' +
+        'dev.azure.com?organization=<organization>&project=<project>&repo=<repository>',
       );
+
+      let url: URL;
+      try {
+        url = new URL(
+          ctx.input.repoUrl.includes('://')
+            ? ctx.input.repoUrl
+            : `https://${ctx.input.repoUrl}`,
+        );
+      } catch {
+        throw invalidRepoUrlError;
+      }
+
       const organization = url.searchParams.get('organization');
       const project = url.searchParams.get('project');
       const repository = url.searchParams.get('repo');
 
       if (url.hostname !== 'dev.azure.com' || !organization || !project || !repository) {
-        throw new Error(
-          'repoUrl must be an Azure DevOps RepoUrlPicker value: ' +
-          'dev.azure.com?organization=<organization>&project=<project>&repo=<repository>',
-        );
+        throw invalidRepoUrlError;
       }
 
       ctx.output('organization', organization);

@@ -3361,6 +3361,86 @@ describe('XRDTemplateEntityProvider', () => {
       ]));
       expect(steps.find(step => step.id === 'create-pull-request').input.targetBranch).toBe('main');
     });
+
+    it('injects targetPath onto the Azure push step', () => {
+      const provider = new XRDTemplateEntityProvider(
+        { run: jest.fn() } as any,
+        mockLogger,
+        azureConfig,
+        mockResourceFetcher as any,
+      );
+      const version = {
+        name: 'v1alpha1',
+        schema: { openAPIV3Schema: { type: 'object', properties: { spec: { type: 'object', properties: {} } } } },
+      };
+      const xrd = {
+        metadata: {
+          name: 'myresources.example.com',
+          annotations: { 'terasky.backstage.io/target-path': 'presets/{dc}/{xrName}' },
+        },
+        spec: { scope: 'Cluster', names: { kind: 'MyResource' }, group: 'example.com', versions: [version] },
+        clusters: ['test-cluster'],
+      };
+
+      const steps: any[] = (provider as any).extractSteps(version, xrd);
+      const pushStep = steps.find((s: any) => s.action === 'azure:repository:push');
+      expect(pushStep.input.targetPath).toBe(
+        'presets/${{ parameters.dc | lower }}/${{ parameters.xrName | lower }}',
+      );
+    });
+
+    it('allows RepoUrlPicker to select dev.azure.com when allowedTargets is unset', () => {
+      const config = new ConfigReader({
+        kubernetesIngestor: {
+          crossplane: {
+            xrds: {
+              publishPhase: {
+                target: 'azure',
+                allowRepoSelection: true,
+                git: {
+                  repoUrl: 'dev.azure.com?organization=example&project=Platform&repo=manifests',
+                  targetBranch: 'main',
+                },
+              },
+            },
+          },
+        },
+      });
+      const provider = new XRDTemplateEntityProvider(
+        { run: jest.fn() } as any,
+        mockLogger,
+        config,
+        mockResourceFetcher as any,
+      );
+      const version = {
+        name: 'v1alpha1',
+        schema: { openAPIV3Schema: { type: 'object', properties: { spec: { type: 'object', properties: {} } } } },
+      };
+      const xrd = {
+        metadata: { name: 'myresources.example.com', annotations: {} },
+        spec: { scope: 'Cluster', names: { kind: 'MyResource' }, group: 'example.com', versions: [version] },
+        clusters: ['test-cluster'],
+      };
+
+      const params: any[] = (provider as any).extractParameters(version, ['test-cluster'], xrd);
+      const creationStep = params.find((p: any) =>
+        JSON.stringify(p).includes('RepoUrlPicker'),
+      );
+      expect(JSON.stringify(creationStep)).toContain('dev.azure.com');
+    });
+
+    it('builds an Azure DevOps pull request URL from remoteUrl and pullRequestId', () => {
+      const provider = new XRDTemplateEntityProvider(
+        { run: jest.fn() } as any,
+        mockLogger,
+        azureConfig,
+        mockResourceFetcher as any,
+      );
+
+      expect((provider as any).getPullRequestUrl()).toBe(
+        '${{ steps["azure-repository-details"].output.remoteUrl }}/pullrequest/${{ steps["create-pull-request"].output.pullRequestId }}',
+      );
+    });
   });
 
   // ── branchPrefix ──────────────────────────────────────────────────────────────

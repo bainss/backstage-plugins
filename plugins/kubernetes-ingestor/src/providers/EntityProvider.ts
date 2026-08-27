@@ -1229,6 +1229,10 @@ export class XRDTemplateEntityProvider implements EntityProvider {
         case 'bitbucketcloud':
           allowedHosts = ['bitbucket.org'];
           break;
+        case 'azure':
+        case 'azuredevops':
+          allowedHosts = ['dev.azure.com'];
+          break;
         default:
           allowedHosts = [];
       }
@@ -1604,7 +1608,13 @@ export class XRDTemplateEntityProvider implements EntityProvider {
     if (safeXrdPathTemplate) {
       const resolvedTargetPath = XRDTemplateEntityProvider.resolvePathTemplateToJinja2(safeXrdPathTemplate);
       for (const step of defaultSteps) {
-        if (step?.input && ('targetBranchName' in step.input || 'branchName' in step.input)) {
+        if (
+          step?.input &&
+          ('targetBranchName' in step.input ||
+            'branchName' in step.input ||
+            'branch' in step.input ||
+            'sourceBranch' in step.input)
+        ) {
           step.input.targetPath = resolvedTargetPath;
           break;
         }
@@ -1647,6 +1657,9 @@ export class XRDTemplateEntityProvider implements EntityProvider {
       case 'bitbucket':
       case 'bitbucketcloud':
         return '${{ steps["create-pull-request"].output.pullRequestUrl }}';
+      case 'azure':
+      case 'azuredevops':
+        return '${{ steps["azure-repository-details"].output.remoteUrl }}/pullrequest/${{ steps["create-pull-request"].output.pullRequestId }}';
       case 'github':
       default:
         return '${{ steps["create-pull-request"].output.remoteUrl }}';

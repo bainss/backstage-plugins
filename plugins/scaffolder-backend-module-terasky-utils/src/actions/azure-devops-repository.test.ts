@@ -34,4 +34,10 @@ describe('createAzureDevOpsRepositoryDetailsAction', () => {
       action.handler!({ input: { repoUrl: 'github.com?owner=example&repo=gitops' }, output } as any),
     ).rejects.toThrow('repoUrl must be an Azure DevOps RepoUrlPicker value');
   });
+
+  it('rejects an unparseable repoUrl with the same format message', async () => {
+    await expect(
+      action.handler!({ input: { repoUrl: 'not a url' }, output } as any),
+    ).rejects.toThrow('repoUrl must be an Azure DevOps RepoUrlPicker value');
+  });
 });
