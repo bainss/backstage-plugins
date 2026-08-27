@@ -535,6 +535,30 @@ describe('createCrossplaneClaimAction', () => {
       expect(writtenPath).toBe('/tmp/workspace/my-db.yaml');
     });
 
+    it('resolves xrdPathTemplate into the workspace path when xrdPathInWorkspace is set', async () => {
+      const action = createCrossplaneClaimAction({ config: mockConfig });
+      const ctx = createMockContext({
+        parameters: { xrName: 'my-db', dc: 'eu-west-1', owner: 'group:default/team' },
+        nameParam: 'xrName',
+        namespaceParam: 'xrNamespace',
+        excludeParams: ['xrName', 'xrNamespace'],
+        apiVersion: 'test.io/v1alpha1',
+        kind: 'Database',
+        clusters: ['temp'],
+        removeEmptyParams: true,
+        ownerParam: 'owner',
+        xrdPathTemplate: 'presets/{dc}/{xrName}',
+        xrdPathInWorkspace: true,
+      });
+
+      await action.handler!(ctx as any);
+
+      const [[writtenPath]] = (fs.outputFileSync as jest.Mock).mock.calls;
+      // azure:repository:push commits a cloned working copy and has no targetPath,
+      // so the repo path has to exist on disk.
+      expect(writtenPath).toBe('/tmp/workspace/presets/eu-west-1/my-db/my-db.yaml');
+    });
+
     it('does NOT double the path when xrdPathTemplate matches the annotation value', async () => {
       const action = createCrossplaneClaimAction({ config: mockConfig });
       const ctx = createMockContext({

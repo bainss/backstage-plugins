@@ -3354,15 +3354,18 @@ describe('XRDTemplateEntityProvider', () => {
 
       const steps: any[] = (provider as any).extractSteps(version, xrd);
 
-      expect(steps.map(step => step.action)).toEqual(expect.arrayContaining([
+      expect(steps.map(step => step.action)).toEqual([
         'terasky:azure-devops:repository-details',
+        'azure:repository:clone',
+        'terasky:claim-template',
         'azure:repository:push',
         'azure:pr:create',
-      ]));
+      ]);
+      expect(steps.find(step => step.id === 'clone-repository').input.branch).toBe('main');
       expect(steps.find(step => step.id === 'create-pull-request').input.targetBranch).toBe('main');
     });
 
-    it('injects targetPath onto the Azure push step', () => {
+    it('writes the manifest to the annotated path instead of setting targetPath', () => {
       const provider = new XRDTemplateEntityProvider(
         { run: jest.fn() } as any,
         mockLogger,
@@ -3383,10 +3386,14 @@ describe('XRDTemplateEntityProvider', () => {
       };
 
       const steps: any[] = (provider as any).extractSteps(version, xrd);
-      const pushStep = steps.find((s: any) => s.action === 'azure:repository:push');
-      expect(pushStep.input.targetPath).toBe(
-        'presets/${{ parameters.dc | lower }}/${{ parameters.xrName | lower }}',
-      );
+      const manifestStep = steps.find((s: any) => s.action === 'terasky:claim-template');
+      expect(manifestStep.input.xrdPathTemplate).toBe('presets/{dc}/{xrName}');
+      expect(manifestStep.input.xrdPathInWorkspace).toBe(true);
+
+      // azure:repository:push accepts only sourcePath, so targetPath must not be emitted.
+      for (const step of steps) {
+        expect(step.input?.targetPath).toBeUndefined();
+      }
     });
 
     it('allows RepoUrlPicker to select dev.azure.com when allowedTargets is unset', () => {
